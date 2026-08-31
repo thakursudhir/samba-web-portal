@@ -1,0 +1,23 @@
+[0;1;32m●[0m samba-web-portal.service - Samba Internal Web Portal Daemon
+     Loaded: loaded (/etc/systemd/system/samba-web-portal.service; enabled; vendor preset: enabled)
+     Active: [0;1;32mactive (running)[0m since Sat 2026-08-29 23:25:13 IST; 9min ago
+   Main PID: 352736 (gunicorn)
+      Tasks: 8 (limit: 19078)
+     Memory: 170.4M
+     CGroup: /system.slice/samba-web-portal.service
+             ├─352736 /opt/samba-web-portal/venv/bin/python3 /opt/samba-web-portal/venv/bin/gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 --access-logfile - --error-logfile -
+             ├─352754 /opt/samba-web-portal/venv/bin/python3 /opt/samba-web-portal/venv/bin/gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 --access-logfile - --error-logfile -
+             ├─352755 /opt/samba-web-portal/venv/bin/python3 /opt/samba-web-portal/venv/bin/gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 --access-logfile - --error-logfile -
+             ├─352756 /opt/samba-web-portal/venv/bin/python3 /opt/samba-web-portal/venv/bin/gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 --access-logfile - --error-logfile -
+             └─352757 /opt/samba-web-portal/venv/bin/python3 /opt/samba-web-portal/venv/bin/gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 --access-logfile - --error-logfile -
+
+Aug 29 23:25:14 dx-new-smb gunicorn[352757]: [2026-08-29 23:25:14 +0530] [352757] [INFO] Application startup complete.
+Aug 29 23:32:14 dx-new-smb gunicorn[352756]: 192.168.124.1:0 - "GET / HTTP/1.1" 200
+Aug 29 23:32:14 dx-new-smb gunicorn[352757]: 192.168.124.1:0 - "GET /static/css/styles.css HTTP/1.1" 200
+Aug 29 23:32:14 dx-new-smb gunicorn[352757]: 192.168.124.1:0 - "GET /static/js/app.js HTTP/1.1" 200
+Aug 29 23:32:14 dx-new-smb gunicorn[352757]: 192.168.124.1:0 - "GET /api/auth/me HTTP/1.1" 401
+Aug 29 23:32:14 dx-new-smb gunicorn[352757]: 192.168.124.1:0 - "GET /favicon.ico HTTP/1.1" 404
+Aug 29 23:32:50 dx-new-smb gunicorn[352756]: 192.168.124.1:0 - "GET /api/auth/me HTTP/1.1" 401
+Aug 29 23:33:00 dx-new-smb gunicorn[352756]: 192.168.124.1:0 - "POST /api/auth/login HTTP/1.1" 200
+Aug 29 23:33:00 dx-new-smb gunicorn[352755]: 192.168.124.1:0 - "GET /api/shares/ HTTP/1.1" 401
+Aug 29 23:33:12 dx-new-smb gunicorn[352757]: 192.168.124.1:0 - "POST /api/auth/logout HTTP/1.1" 200
