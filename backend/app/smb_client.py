@@ -2,6 +2,7 @@ import os
 import shutil
 import uuid
 import smbclient
+import smbclient.shutil as smb_shutil
 from datetime import datetime
 from typing import List, Dict, Any, Generator
 from smbprotocol.connection import Connection
@@ -142,19 +143,30 @@ def write_file_stream(username: str, password: str, share_name: str, subpath: st
                 break
             f.write(chunk)
 
-def copy_item(username: str, password: str, share_name: str, src_subpath: str, dst_subpath: str) -> None:
+def copy_item(username: str, password: str, share_name: str, src_subpath: str, dst_subpath: str, is_dir: bool = False) -> None:
+    """Copies a file OR a full folder (recursively) to a new location on the same share."""
     register_user_session(username, password)
     src_unc = sanitize_path(share_name, src_subpath)
     dst_unc = sanitize_path(share_name, dst_subpath)
-    
-    # Check if directory or file
-    with smbclient.open_file(src_unc, mode="rb") as f_src:
-        with smbclient.open_file(dst_unc, mode="wb") as f_dst:
-            while True:
-                chunk = f_src.read(65536)
-                if not chunk:
-                    break
-                f_dst.write(chunk)
+
+    if is_dir:
+        # Recursively copies the entire folder tree (sub-folders + files)
+        smb_shutil.copytree(src_unc, dst_unc)
+    else:
+        with smbclient.open_file(src_unc, mode="rb") as f_src:
+            with smbclient.open_file(dst_unc, mode="wb") as f_dst:
+                while True:
+                    chunk = f_src.read(65536)
+                    if not chunk:
+                        break
+                    f_dst.write(chunk)
+
+def move_item(username: str, password: str, share_name: str, src_subpath: str, dst_subpath: str) -> None:
+    """Moves (cut-paste / drag-drop) a file or folder to a new location on the same share."""
+    register_user_session(username, password)
+    src_unc = sanitize_path(share_name, src_subpath)
+    dst_unc = sanitize_path(share_name, dst_subpath)
+    smbclient.rename(src_unc, dst_unc)
 
 def create_directory(username: str, password: str, share_name: str, subpath: str) -> None:
     register_user_session(username, password)
@@ -171,6 +183,28 @@ def delete_item(username: str, password: str, share_name: str, subpath: str, is_
     register_user_session(username, password)
     unc_path = sanitize_path(share_name, subpath)
     if is_dir:
-        smbclient.rmdir(unc_path)
+        # rmtree deletes non-empty folders too (recursively)
+        smb_shutil.rmtree(unc_path)
     else:
         smbclient.remove(unc_path)
+
+def get_folder_size(username: str, password: str, share_name: str, subpath: str = "") -> int:
+    """Recursively walks a folder over SMB and sums up the size of every file inside it."""
+    register_user_session(username, password)
+    total_size = {"bytes": 0}
+
+    def _walk(current_subpath: str) -> None:
+        unc_path = sanitize_path(share_name, current_subpath)
+        for entry in smbclient.scandir(unc_path):
+            entry_subpath = f"{current_subpath}/{entry.name}".strip("/") if current_subpath else entry.name
+            try:
+                if entry.is_dir():
+                    _walk(entry_subpath)
+                else:
+                    total_size["bytes"] += entry.stat().st_size
+            except Exception:
+                # Skip files/folders that can't be read (permissions, locked, etc.)
+                continue
+
+    _walk(subpath)
+    return total_size["bytes"]

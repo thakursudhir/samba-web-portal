@@ -1,5 +1,6 @@
 import mimetypes
 import urllib.parse
+from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -14,7 +15,9 @@ from app.smb_client import (
     rename_item,
     delete_item,
     copy_item,
-    get_storage_usage
+    move_item,
+    get_storage_usage,
+    get_folder_size
 )
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -39,7 +42,16 @@ class RenameRequest(BaseModel):
 class CopyRequest(BaseModel):
     share: str
     src_path: str
-    new_name: str
+    is_dir: bool = False
+    dest_path: str = ""          # destination FOLDER (empty string = share root)
+    new_name: Optional[str] = None  # optional; defaults to the original name
+
+class MoveRequest(BaseModel):
+    share: str
+    src_path: str
+    is_dir: bool = False
+    dest_path: str = ""          # destination FOLDER (empty string = share root)
+    new_name: Optional[str] = None  # optional; defaults to the original name
 
 class DeleteRequest(BaseModel):
     share: str
@@ -142,18 +154,48 @@ def rename(request: Request, body: RenameRequest):
         log_event(user["username"], "RENAME", f"{body.share}/{body.old_path}", status="DENIED", details=str(e))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Rename failed: {str(e)}")
 
+@router.get("/folder-size")
+def folder_size(request: Request, share: str, path: str = ""):
+    """Recursively calculates the total size of a folder (used for the file table + 'Copy/Cut' info)."""
+    user = get_auth_user(request)
+    try:
+        size = get_folder_size(user["username"], user["password"], share, path)
+        return {"share": share, "path": path, "size": size}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Could not calculate folder size: {str(e)}")
+
 @router.post("/copy")
 def copy(request: Request, body: CopyRequest):
+    """Copies a file or folder. Paste into a different folder (dest_path) keeps the same name;
+    pasting into the same folder needs new_name (e.g. 'Copy_of_xyz') since names must stay unique."""
     user = get_auth_user(request)
-    parent_path = "/".join(body.src_path.replace("\\", "/").rstrip("/").split("/")[:-1])
-    dst_path = f"{parent_path}/{body.new_name}".strip("/") if parent_path else body.new_name
+    original_name = body.src_path.replace("\\", "/").rstrip("/").split("/")[-1]
+    target_name = body.new_name or original_name
+    dst_path = f"{body.dest_path}/{target_name}".strip("/") if body.dest_path else target_name
     try:
-        copy_item(user["username"], user["password"], body.share, body.src_path, dst_path)
+        copy_item(user["username"], user["password"], body.share, body.src_path, dst_path, body.is_dir)
         log_event(user["username"], "COPY", f"{body.share}/{body.src_path} -> {dst_path}", status="SUCCESS")
         return {"status": "success", "new_path": dst_path}
     except Exception as e:
         log_event(user["username"], "COPY", f"{body.share}/{body.src_path}", status="DENIED", details=str(e))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Copy failed: {str(e)}")
+
+@router.post("/move")
+def move(request: Request, body: MoveRequest):
+    """Moves (cut-paste, or drag & drop) a file or folder into a different folder on the same share."""
+    user = get_auth_user(request)
+    original_name = body.src_path.replace("\\", "/").rstrip("/").split("/")[-1]
+    target_name = body.new_name or original_name
+    dst_path = f"{body.dest_path}/{target_name}".strip("/") if body.dest_path else target_name
+    if dst_path == body.src_path.replace("\\", "/").strip("/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source and destination are the same.")
+    try:
+        move_item(user["username"], user["password"], body.share, body.src_path, dst_path)
+        log_event(user["username"], "MOVE", f"{body.share}/{body.src_path} -> {dst_path}", status="SUCCESS")
+        return {"status": "success", "new_path": dst_path}
+    except Exception as e:
+        log_event(user["username"], "MOVE", f"{body.share}/{body.src_path}", status="DENIED", details=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Move failed: {str(e)}")
 
 @router.post("/delete")
 def delete(request: Request, body: DeleteRequest):
